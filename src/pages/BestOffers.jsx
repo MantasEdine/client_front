@@ -10,10 +10,9 @@ const api = axios.create({
   },
 });
 
-// Socket.io connection
 const socket = io("http://localhost:5000");
 
-export default function RemisesTable() {
+export default function AdminPanel() {
   const [fournisseurs, setFournisseurs] = useState([
     { id: 1, name: "FOURNISSEUR 1" },
     { id: 2, name: "FOURNISSEUR 2" },
@@ -23,30 +22,47 @@ export default function RemisesTable() {
   const [editingHeader, setEditingHeader] = useState(null);
   const [tempHeaderName, setTempHeaderName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [editingCell, setEditingCell] = useState(null);
 
   const token = localStorage.getItem("token");
+  const user = JSON.parse(localStorage.getItem("user"));
 
-  // Socket.io listeners
+  // Check if admin has edit access
   useEffect(() => {
-    socket.on("remise-updated", () => {
-      console.log("Remise updated by another user");
-    });
-
+    checkEditAccess();
+    socket.on("permission-updated", checkEditAccess);
+    socket.on("remise-updated", fetchRemises);
     return () => {
+      socket.off("permission-updated");
       socket.off("remise-updated");
     };
   }, []);
 
-  // Créer une ligne vide
-  const createEmptyRow = () => ({
-    id: Date.now() + Math.random(),
-    produit: "",
-    laboratoire: "",
-    remises: {},
-  });
+  const checkEditAccess = async () => {
+    try {
+      const { data } = await api.get(`/auth/check-access/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setCanEdit(data.canEdit);
+    } catch (err) {
+      console.error("Error checking access:", err);
+      setCanEdit(false);
+    }
+  };
 
-  // Calcul automatique des 3 meilleures offres
+  const fetchRemises = async () => {
+    try {
+      const { data } = await api.get("/remise", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // Process and display remises
+      console.log("Remises updated:", data);
+    } catch (err) {
+      console.error("Error fetching remises:", err);
+    }
+  };
+
   const calculateBestOffers = (remises) => {
     const offers = fournisseurs
       .map((f) => ({
@@ -63,77 +79,47 @@ export default function RemisesTable() {
     ];
   };
 
-  // Ajouter un fournisseur
-  const addFournisseur = () => {
-    const name = prompt("Nom du nouveau fournisseur :");
-    if (!name || !name.trim()) return;
+  const createEmptyRow = () => ({
+    id: Date.now() + Math.random(),
+    produit: "",
+    laboratoire: "",
+    remises: {},
+  });
 
-    const newId = Math.max(...fournisseurs.map((f) => f.id), 0) + 1;
-    setFournisseurs([...fournisseurs, { id: newId, name: name.trim() }]);
-  };
-
-  // Supprimer un fournisseur
-  const removeFournisseur = (id) => {
-    if (fournisseurs.length <= 1) {
-      alert("Vous devez avoir au moins un fournisseur.");
-      return;
-    }
-    if (!window.confirm("Supprimer ce fournisseur ?")) return;
-
-    setFournisseurs(fournisseurs.filter((f) => f.id !== id));
-    setRows(
-      rows.map((row) => {
-        const newRemises = { ...row.remises };
-        delete newRemises[id];
-        return { ...row, remises: newRemises };
-      })
-    );
-  };
-
-  // Renommer un fournisseur
-  const startEditingHeader = (f) => {
-    setEditingHeader(f.id);
-    setTempHeaderName(f.name);
-  };
-
-  const saveHeaderName = () => {
-    if (!tempHeaderName.trim()) {
-      setEditingHeader(null);
-      return;
-    }
-
-    setFournisseurs(
-      fournisseurs.map((f) =>
-        f.id === editingHeader ? { ...f, name: tempHeaderName.trim() } : f
-      )
-    );
-
-    setEditingHeader(null);
-    setTempHeaderName("");
-  };
-
-  // Ajouter une ligne
   const addRow = () => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      return;
+    }
     setRows([...rows, createEmptyRow()]);
   };
 
-  // Supprimer une ligne
   const deleteRow = (id) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de supprimer les données.");
+      return;
+    }
     if (rows.length <= 1) return;
     if (!window.confirm("Supprimer cette ligne ?")) return;
     setRows(rows.filter((r) => r.id !== id));
   };
 
-  // Dupliquer une ligne
   const duplicateRow = (index) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de dupliquer les données.");
+      return;
+    }
     const copy = { ...rows[index], id: Date.now() + Math.random() };
     const newRows = [...rows];
     newRows.splice(index + 1, 0, copy);
     setRows(newRows);
   };
 
-  // Modifier une cellule
   const updateCell = (rowId, field, value) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      return;
+    }
     setRows(
       rows.map((row) =>
         row.id === rowId ? { ...row, [field]: value } : row
@@ -141,8 +127,11 @@ export default function RemisesTable() {
     );
   };
 
-  // Modifier une remise
   const updateRemise = (rowId, fournisseurId, value) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      return;
+    }
     setRows(
       rows.map((row) =>
         row.id === rowId
@@ -152,19 +141,45 @@ export default function RemisesTable() {
     );
   };
 
-  // Sauvegarder TOUT dans la DB
-  const saveAllToDatabase = async () => {
+  const startEditingHeader = (f) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      return;
+    }
+    setEditingHeader(f.id);
+    setTempHeaderName(f.name);
+  };
+
+  const saveHeaderName = () => {
+    if (!tempHeaderName.trim()) {
+      setEditingHeader(null);
+      return;
+    }
+    setFournisseurs(
+      fournisseurs.map((f) =>
+        f.id === editingHeader ? { ...f, name: tempHeaderName.trim() } : f
+      )
+    );
+    setEditingHeader(null);
+    setTempHeaderName("");
+  };
+
+  // Save to database (admin can only view, not export)
+  const saveToDatabase = async () => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission de sauvegarder les données.");
+      return;
+    }
+
     try {
-      // Filtrer les lignes vides
-      const validRows = rows.filter(r => r.produit && r.laboratoire);
-      
+      const validRows = rows.filter((r) => r.produit && r.laboratoire);
+
       if (validRows.length === 0) {
-        alert("Aucune donnée à sauvegarder.");
-        return false;
+        alert("⚠️ Aucune donnée à sauvegarder.");
+        return;
       }
 
       for (const row of validRows) {
-        // 1. Créer/récupérer laboratoire
         let laboId = null;
         try {
           const { data: laboData } = await api.post(
@@ -175,18 +190,14 @@ export default function RemisesTable() {
           laboId = laboData.laboratoire._id;
         } catch (err) {
           if (err.response?.status === 400) {
-            // Labo existe déjà, le récupérer
             const { data: labos } = await api.get("/laboratoire", {
               headers: { Authorization: `Bearer ${token}` },
             });
             const existingLabo = labos.find((l) => l.name === row.laboratoire);
             laboId = existingLabo?._id;
-          } else {
-            throw err;
           }
         }
 
-        // 2. Créer/récupérer produit
         let produitId = null;
         try {
           const { data: produitData } = await api.post(
@@ -197,22 +208,17 @@ export default function RemisesTable() {
           produitId = produitData.produit._id;
         } catch (err) {
           if (err.response?.status === 400) {
-            // Produit existe déjà
             const { data: produits } = await api.get("/produit", {
               headers: { Authorization: `Bearer ${token}` },
             });
             const existingProduit = produits.find((p) => p.name === row.produit);
             produitId = existingProduit?._id;
-          } else {
-            throw err;
           }
         }
 
-        // 3. Créer/récupérer fournisseurs et créer remises
         for (const fournisseur of fournisseurs) {
           const remiseValue = row.remises[fournisseur.id];
           if (remiseValue && parseFloat(remiseValue) > 0) {
-            // Créer/récupérer fournisseur
             let fournisseurId = null;
             try {
               const { data: fournData } = await api.post(
@@ -228,12 +234,9 @@ export default function RemisesTable() {
                 });
                 const existingFourn = fourns.find((f) => f.name === fournisseur.name);
                 fournisseurId = existingFourn?._id;
-              } else {
-                throw err;
               }
             }
 
-            // Créer remise
             try {
               await api.post(
                 "/remise",
@@ -251,113 +254,20 @@ export default function RemisesTable() {
         }
       }
 
-      return true;
+      alert("✅ Données sauvegardées avec succès !");
+      socket.emit("remise-update");
     } catch (err) {
       console.error("Erreur lors de la sauvegarde:", err);
       alert("❌ Erreur lors de la sauvegarde des données.");
-      return false;
     }
   };
 
-  // Export Excel + Upload to backend + Reset
-  const exportAndUploadToBackend = async () => {
-    if (rows.length === 0 || !rows.some(r => r.produit || r.laboratoire)) {
-      alert("⚠️ Aucune donnée à télécharger.");
+  const handleImport = async (file) => {
+    if (!canEdit) {
+      alert("❌ Vous n'avez pas la permission d'importer des données.");
       return;
     }
 
-    // Demander le nom du fichier
-    const fileName = prompt(
-      "Nom du fichier Excel (sans extension) :",
-      `remises_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}`
-    );
-    if (!fileName || !fileName.trim()) return;
-
-    const cleanFileName = fileName.trim().replace(/[^a-z0-9_-]/gi, '_');
-
-    try {
-      setUploading(true);
-
-      // 1. Sauvegarder toutes les données dans la DB
-      const saved = await saveAllToDatabase();
-      if (!saved) {
-        setUploading(false);
-        return;
-      }
-
-      // 2. Créer les données Excel
-      const data = rows
-        .filter(r => r.produit || r.laboratoire) // Exclure lignes vides
-        .map((row) => {
-          const obj = {
-            Produit: row.produit,
-            Laboratoire: row.laboratoire,
-          };
-
-          fournisseurs.forEach((f) => {
-            obj[f.name] = row.remises[f.id] || "";
-          });
-
-          const best = calculateBestOffers(row.remises);
-          obj["MEILLEURE OFFRE"] = best[0].value > 0 ? `${best[0].name} (${best[0].value}%)` : "—";
-          obj["2ÈME OFFRE"] = best[1].value > 0 ? `${best[1].name} (${best[1].value}%)` : "—";
-          obj["3ÈME OFFRE"] = best[2].value > 0 ? `${best[2].name} (${best[2].value}%)` : "—";
-
-          return obj;
-        });
-
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Remises");
-
-      const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-      const blob = new Blob([excelBuffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-
-      const finalFileName = `${cleanFileName}.xlsx`;
-
-      // 3. Télécharger localement
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = finalFileName;
-      link.click();
-      window.URL.revokeObjectURL(url);
-
-      // 4. Uploader vers le backend
-      const formData = new FormData();
-      formData.append("file", blob, finalFileName);
-
-      await api.post("/excel/upload", formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      alert("✅ Fichier téléchargé et sauvegardé sur le serveur !");
-
-      // 5. Notifier via socket
-      socket.emit("remise-update");
-
-      // 6. RESET le tableau
-      setRows([]);
-      setFournisseurs([
-        { id: 1, name: "FOURNISSEUR 1" },
-        { id: 2, name: "FOURNISSEUR 2" },
-        { id: 3, name: "FOURNISSEUR 3" },
-      ]);
-    } catch (err) {
-      console.error("Erreur lors de l'export/upload :", err);
-      alert("❌ Erreur lors de la sauvegarde du fichier.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // Import Excel
-  const handleImport = async (file) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
@@ -373,7 +283,6 @@ export default function RemisesTable() {
       const excludedCols = ["Produit", "Laboratoire", "MEILLEURE OFFRE", "2ÈME OFFRE", "3ÈME OFFRE"];
       const fournisseurCols = headers.filter((h) => !excludedCols.includes(h));
 
-      // Créer les fournisseurs localement (pas de sauvegarde DB)
       const newFournisseurs = fournisseurCols.map((name, i) => ({
         id: i + 1,
         name,
@@ -381,7 +290,6 @@ export default function RemisesTable() {
 
       setFournisseurs(newFournisseurs);
 
-      // Créer les lignes localement (pas de sauvegarde DB)
       const newRows = json.map((r, i) => {
         const remises = {};
         newFournisseurs.forEach((f) => {
@@ -401,7 +309,7 @@ export default function RemisesTable() {
       });
 
       setRows(newRows);
-      alert(`✅ ${newRows.length} lignes importées ! Les meilleures offres sont calculées automatiquement.`);
+      alert(`✅ ${newRows.length} lignes importées !`);
     } catch (err) {
       console.error(err);
       alert("❌ Erreur lors de l'import du fichier.");
@@ -419,8 +327,15 @@ export default function RemisesTable() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
+      {/* Permission Banner */}
+      <div className={`mb-4 p-3 rounded ${canEdit ? "bg-green-900/30 border border-green-700" : "bg-red-900/30 border border-red-700"}`}>
+        <p className={canEdit ? "text-green-300" : "text-red-300"}>
+          {canEdit ? "✅ Vous avez les permissions de modification" : "🔒 Vous n'avez PAS les permissions de modification"}
+        </p>
+      </div>
+
       <div className="flex items-center justify-between mb-3">
-        <h1 className="text-xl font-bold">Tableau des Remises</h1>
+        <h1 className="text-xl font-bold">Panneau Admin - Gestion des Remises</h1>
 
         <div className="flex items-center gap-2 text-sm">
           <input
@@ -430,76 +345,58 @@ export default function RemisesTable() {
             className="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-white"
           />
 
-          <label className="bg-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-600">
+          <label className={`px-2 py-1 rounded cursor-pointer ${canEdit ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-700 opacity-50 cursor-not-allowed"}`}>
             📂 Importer Excel
             <input
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
               className="hidden"
+              disabled={!canEdit}
             />
           </label>
 
           <button
-            onClick={addFournisseur}
-            className="bg-indigo-600 px-2 py-1 rounded hover:bg-indigo-500"
-          >
-            + Fournisseur
-          </button>
-
-          <button
             onClick={addRow}
-            className="bg-green-600 px-2 py-1 rounded hover:bg-green-500"
+            disabled={!canEdit}
+            className={`px-2 py-1 rounded ${canEdit ? "bg-green-600 hover:bg-green-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
           >
             + Ligne
           </button>
 
           <button
-            onClick={exportAndUploadToBackend}
-            disabled={uploading}
-            className={`bg-blue-600 px-2 py-1 rounded hover:bg-blue-500 ${
-              uploading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
+            onClick={saveToDatabase}
+            disabled={!canEdit}
+            className={`px-2 py-1 rounded ${canEdit ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
           >
-            {uploading ? "⏳ Envoi..." : "💾 Télécharger Excel"}
+            💾 Sauvegarder
           </button>
         </div>
       </div>
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed border-gray-700 rounded-lg">
-          <svg
-            className="w-16 h-16 text-gray-600 mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
+          <svg className="w-16 h-16 text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <h3 className="text-lg font-medium text-gray-400 mb-2">Aucune donnée</h3>
           <p className="text-sm text-gray-500 mb-4">Importez un fichier Excel ou ajoutez une ligne pour commencer</p>
-          <div className="flex gap-2">
-            <label className="bg-indigo-600 px-4 py-2 rounded cursor-pointer hover:bg-indigo-500">
-              📂 Importer Excel
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
-                className="hidden"
-              />
-            </label>
-            <button
-              onClick={addRow}
-              className="bg-green-600 px-4 py-2 rounded hover:bg-green-500"
-            >
-              + Ajouter une ligne
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex gap-2">
+              <label className="bg-indigo-600 px-4 py-2 rounded cursor-pointer hover:bg-indigo-500">
+                📂 Importer Excel
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
+                  className="hidden"
+                />
+              </label>
+              <button onClick={addRow} className="bg-green-600 px-4 py-2 rounded hover:bg-green-500">
+                + Ajouter une ligne
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="overflow-auto border border-gray-700 rounded">
@@ -524,18 +421,11 @@ export default function RemisesTable() {
                         onBlur={saveHeaderName}
                         onKeyDown={(e) => e.key === "Enter" && saveHeaderName()}
                         autoFocus
+                        disabled={!canEdit}
                         className="w-full bg-gray-700 px-1 py-1 rounded text-xs"
                       />
                     ) : (
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{f.name}</span>
-                        <button
-                          onClick={() => removeFournisseur(f.id)}
-                          className="text-red-400 hover:text-red-300 text-xs ml-1"
-                        >
-                          ✕
-                        </button>
-                      </div>
+                      <span className="font-medium">{f.name}</span>
                     )}
                   </th>
                 ))}
@@ -564,7 +454,8 @@ export default function RemisesTable() {
                       <input
                         value={row.produit}
                         onChange={(e) => updateCell(row.id, "produit", e.target.value)}
-                        className="w-full bg-transparent px-1 py-1 text-xs outline-none"
+                        disabled={!canEdit}
+                        className={`w-full px-1 py-1 text-xs outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                         placeholder="Produit"
                       />
                     </td>
@@ -573,7 +464,8 @@ export default function RemisesTable() {
                       <input
                         value={row.laboratoire}
                         onChange={(e) => updateCell(row.id, "laboratoire", e.target.value)}
-                        className="w-full bg-transparent px-1 py-1 text-xs outline-none"
+                        disabled={!canEdit}
+                        className={`w-full px-1 py-1 text-xs outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                         placeholder="Laboratoire"
                       />
                     </td>
@@ -583,7 +475,8 @@ export default function RemisesTable() {
                         <input
                           value={row.remises[f.id] || ""}
                           onChange={(e) => updateRemise(row.id, f.id, e.target.value)}
-                          className="w-full bg-transparent px-1 py-1 text-xs text-right outline-none"
+                          disabled={!canEdit}
+                          className={`w-full px-1 py-1 text-xs text-right outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                           placeholder="0"
                         />
                       </td>
@@ -611,13 +504,15 @@ export default function RemisesTable() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => duplicateRow(rowIndex)}
-                          className="text-blue-400 hover:text-blue-300 text-xs"
+                          disabled={!canEdit}
+                          className={canEdit ? "text-blue-400 hover:text-blue-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
                         >
                           Dup
                         </button>
                         <button
                           onClick={() => deleteRow(row.id)}
-                          className="text-red-400 hover:text-red-300 text-xs"
+                          disabled={!canEdit}
+                          className={canEdit ? "text-red-400 hover:text-red-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
                         >
                           Supp
                         </button>
@@ -632,8 +527,7 @@ export default function RemisesTable() {
       )}
 
       <div className="mt-3 text-xs text-gray-400">
-        💡 Double-cliquez sur un nom de fournisseur pour le renommer. 
-        Les données sont sauvegardées uniquement quand vous cliquez sur "Télécharger Excel".
+        💡 Les permissions de modification sont contrôlées par le Root. Contactez l'administrateur pour obtenir les permissions d'édition.
       </div>
     </div>
   );

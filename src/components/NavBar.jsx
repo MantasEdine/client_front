@@ -45,15 +45,17 @@ export default function BarreNavigation() {
   };
 
   // Liens dynamiques selon le rôle
-  const liens = [
-    ...(role === "root"
-      ? [{ nom: "Tableau de bord", chemin: "/dashboard" }]
-      : [{ nom: "Panneau Admin", chemin: "/admin-panel" }]),
-    { nom: "Tableau Excel", chemin: "/remises" },
-    { nom: "Fournisseurs", chemin: "/fournisseur" },
-    { nom: "Produits", chemin: "/produits" },
-    { nom: "Laboratoire", chemin: "/laboratoire" },
-  ];
+ const liens = [
+  ...(role === "root"
+    ? [
+        { nom: "Tableau de bord", chemin: "/dashboard" },
+        { nom: "Tableau Excel", chemin: "/remises" }, // only root
+      ]
+    : [{ nom: "Panneau Admin", chemin: "/admin-panel" }]),
+  { nom: "Fournisseurs", chemin: "/fournisseur" },
+  { nom: "Produits", chemin: "/produits" },
+  { nom: "Laboratoire", chemin: "/laboratoire" },
+];
 
   function classes(...valeurs) {
     return valeurs.filter(Boolean).join(" ");
@@ -115,7 +117,7 @@ export default function BarreNavigation() {
               <MenuItems className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-gray-800 py-1 outline -outline-offset-1 outline-white/10">
                 <MenuItem>
                   <NavLink
-                    to="/profil"
+                    to="/profile"
                     className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/5"
                   >
                     Profil
