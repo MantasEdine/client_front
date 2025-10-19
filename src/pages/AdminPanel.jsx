@@ -22,13 +22,15 @@ export default function AdminPanel() {
   const [editingHeader, setEditingHeader] = useState(null);
   const [tempHeaderName, setTempHeaderName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [canEdit, setCanEdit] = useState(false);
-  const [editingCell, setEditingCell] = useState(null);
+  const [permissions, setPermissions] = useState({
+    canEdit: false,
+    canUpload: false,
+    canDownload: false,
+  });
 
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user"));
 
-  // Check if admin has edit access
   useEffect(() => {
     checkEditAccess();
     socket.on("permission-updated", checkEditAccess);
@@ -44,10 +46,18 @@ export default function AdminPanel() {
       const { data } = await api.get(`/auth/check-access/${user.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setCanEdit(data.canEdit);
+      setPermissions({
+        canEdit: data.canEdit || false,
+        canUpload: data.canUpload || false,
+        canDownload: data.canDownload || false,
+      });
     } catch (err) {
       console.error("Error checking access:", err);
-      setCanEdit(false);
+      setPermissions({
+        canEdit: false,
+        canUpload: false,
+        canDownload: false,
+      });
     }
   };
 
@@ -56,7 +66,6 @@ export default function AdminPanel() {
       const { data } = await api.get("/remise", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // Process and display remises
       console.log("Remises updated:", data);
     } catch (err) {
       console.error("Error fetching remises:", err);
@@ -87,7 +96,7 @@ export default function AdminPanel() {
   });
 
   const addRow = () => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de modifier les données.");
       return;
     }
@@ -95,7 +104,7 @@ export default function AdminPanel() {
   };
 
   const deleteRow = (id) => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de supprimer les données.");
       return;
     }
@@ -105,7 +114,7 @@ export default function AdminPanel() {
   };
 
   const duplicateRow = (index) => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de dupliquer les données.");
       return;
     }
@@ -116,7 +125,7 @@ export default function AdminPanel() {
   };
 
   const updateCell = (rowId, field, value) => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de modifier les données.");
       return;
     }
@@ -128,7 +137,7 @@ export default function AdminPanel() {
   };
 
   const updateRemise = (rowId, fournisseurId, value) => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de modifier les données.");
       return;
     }
@@ -142,7 +151,7 @@ export default function AdminPanel() {
   };
 
   const startEditingHeader = (f) => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de modifier les données.");
       return;
     }
@@ -164,9 +173,8 @@ export default function AdminPanel() {
     setTempHeaderName("");
   };
 
-  // Save to database (admin can only view, not export)
   const saveToDatabase = async () => {
-    if (!canEdit) {
+    if (!permissions.canEdit) {
       alert("❌ Vous n'avez pas la permission de sauvegarder les données.");
       return;
     }
@@ -263,7 +271,7 @@ export default function AdminPanel() {
   };
 
   const handleImport = async (file) => {
-    if (!canEdit) {
+    if (!permissions.canUpload) {
       alert("❌ Vous n'avez pas la permission d'importer des données.");
       return;
     }
@@ -328,10 +336,18 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
       {/* Permission Banner */}
-      <div className={`mb-4 p-3 rounded ${canEdit ? "bg-green-900/30 border border-green-700" : "bg-red-900/30 border border-red-700"}`}>
-        <p className={canEdit ? "text-green-300" : "text-red-300"}>
-          {canEdit ? "✅ Vous avez les permissions de modification" : "🔒 Vous n'avez PAS les permissions de modification"}
-        </p>
+      <div className={`mb-4 p-3 rounded ${permissions.canEdit ? "bg-green-900/30 border border-green-700" : "bg-red-900/30 border border-red-700"}`}>
+        <div className="text-sm">
+          <p className={permissions.canEdit ? "text-green-300" : "text-red-300"}>
+            {permissions.canEdit ? "✅ Modification: Activée" : "🔒 Modification: Désactivée"}
+          </p>
+          <p className={permissions.canUpload ? "text-green-300" : "text-red-300"}>
+            {permissions.canUpload ? "✅ Import: Activé" : "🔒 Import: Désactivé"}
+          </p>
+          <p className={permissions.canDownload ? "text-green-300" : "text-red-300"}>
+            {permissions.canDownload ? "✅ Export: Activé" : "🔒 Export: Désactivé"}
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center justify-between mb-3">
@@ -345,29 +361,29 @@ export default function AdminPanel() {
             className="px-2 py-1 rounded bg-gray-800 border border-gray-700 text-white"
           />
 
-          <label className={`px-2 py-1 rounded cursor-pointer ${canEdit ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-700 opacity-50 cursor-not-allowed"}`}>
+          <label className={`px-2 py-1 rounded cursor-pointer ${permissions.canUpload ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-700 opacity-50 cursor-not-allowed"}`}>
             📂 Importer Excel
             <input
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
               className="hidden"
-              disabled={!canEdit}
+              disabled={!permissions.canUpload}
             />
           </label>
 
           <button
             onClick={addRow}
-            disabled={!canEdit}
-            className={`px-2 py-1 rounded ${canEdit ? "bg-green-600 hover:bg-green-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
+            disabled={!permissions.canEdit}
+            className={`px-2 py-1 rounded ${permissions.canEdit ? "bg-green-600 hover:bg-green-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
           >
             + Ligne
           </button>
 
           <button
             onClick={saveToDatabase}
-            disabled={!canEdit}
-            className={`px-2 py-1 rounded ${canEdit ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
+            disabled={!permissions.canEdit}
+            className={`px-2 py-1 rounded ${permissions.canEdit ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
           >
             💾 Sauvegarder
           </button>
@@ -381,20 +397,24 @@ export default function AdminPanel() {
           </svg>
           <h3 className="text-lg font-medium text-gray-400 mb-2">Aucune donnée</h3>
           <p className="text-sm text-gray-500 mb-4">Importez un fichier Excel ou ajoutez une ligne pour commencer</p>
-          {canEdit && (
+          {(permissions.canUpload || permissions.canEdit) && (
             <div className="flex gap-2">
-              <label className="bg-indigo-600 px-4 py-2 rounded cursor-pointer hover:bg-indigo-500">
-                📂 Importer Excel
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
-                  className="hidden"
-                />
-              </label>
-              <button onClick={addRow} className="bg-green-600 px-4 py-2 rounded hover:bg-green-500">
-                + Ajouter une ligne
-              </button>
+              {permissions.canUpload && (
+                <label className="bg-indigo-600 px-4 py-2 rounded cursor-pointer hover:bg-indigo-500">
+                  📂 Importer Excel
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => e.target.files[0] && handleImport(e.target.files[0])}
+                    className="hidden"
+                  />
+                </label>
+              )}
+              {permissions.canEdit && (
+                <button onClick={addRow} className="bg-green-600 px-4 py-2 rounded hover:bg-green-500">
+                  + Ajouter une ligne
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -421,7 +441,7 @@ export default function AdminPanel() {
                         onBlur={saveHeaderName}
                         onKeyDown={(e) => e.key === "Enter" && saveHeaderName()}
                         autoFocus
-                        disabled={!canEdit}
+                        disabled={!permissions.canEdit}
                         className="w-full bg-gray-700 px-1 py-1 rounded text-xs"
                       />
                     ) : (
@@ -454,8 +474,8 @@ export default function AdminPanel() {
                       <input
                         value={row.produit}
                         onChange={(e) => updateCell(row.id, "produit", e.target.value)}
-                        disabled={!canEdit}
-                        className={`w-full px-1 py-1 text-xs outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
+                        disabled={!permissions.canEdit}
+                        className={`w-full px-1 py-1 text-xs outline-none ${permissions.canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                         placeholder="Produit"
                       />
                     </td>
@@ -464,8 +484,8 @@ export default function AdminPanel() {
                       <input
                         value={row.laboratoire}
                         onChange={(e) => updateCell(row.id, "laboratoire", e.target.value)}
-                        disabled={!canEdit}
-                        className={`w-full px-1 py-1 text-xs outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
+                        disabled={!permissions.canEdit}
+                        className={`w-full px-1 py-1 text-xs outline-none ${permissions.canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                         placeholder="Laboratoire"
                       />
                     </td>
@@ -475,8 +495,8 @@ export default function AdminPanel() {
                         <input
                           value={row.remises[f.id] || ""}
                           onChange={(e) => updateRemise(row.id, f.id, e.target.value)}
-                          disabled={!canEdit}
-                          className={`w-full px-1 py-1 text-xs text-right outline-none ${canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
+                          disabled={!permissions.canEdit}
+                          className={`w-full px-1 py-1 text-xs text-right outline-none ${permissions.canEdit ? "bg-transparent" : "bg-gray-800 opacity-50"}`}
                           placeholder="0"
                         />
                       </td>
@@ -504,15 +524,15 @@ export default function AdminPanel() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => duplicateRow(rowIndex)}
-                          disabled={!canEdit}
-                          className={canEdit ? "text-blue-400 hover:text-blue-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
+                          disabled={!permissions.canEdit}
+                          className={permissions.canEdit ? "text-blue-400 hover:text-blue-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
                         >
                           Dup
                         </button>
                         <button
                           onClick={() => deleteRow(row.id)}
-                          disabled={!canEdit}
-                          className={canEdit ? "text-red-400 hover:text-red-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
+                          disabled={!permissions.canEdit}
+                          className={permissions.canEdit ? "text-red-400 hover:text-red-300 text-xs" : "text-gray-500 text-xs cursor-not-allowed"}
                         >
                           Supp
                         </button>

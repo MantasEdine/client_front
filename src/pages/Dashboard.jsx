@@ -1,21 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import api from "../api/axios";
-
+import { io } from "socket.io-client"; // Add this import
 export default function Dashboard() {
   const [admins, setAdmins] = useState([]);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
+ const socket = useMemo(() => io("http://localhost:5000"), []);
+  const [permissions, setPermissions] = useState({}); // New: store permissions per user
   const token = localStorage.getItem("token");
-
+ 
+   useEffect(() => {
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
   // Récupérer tous les administrateurs
   const fetchAdmins = async () => {
     try {
       const { data } = await api.get("/auth/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       setAdmins(data);
+
+      // Initialize permissions state for each admin
+      const perms = {};
+      data.forEach((user) => {
+        perms[user._id] = {
+          canEdit: user.canEdit || false,
+          canUpload: user.canUpload || false,
+          canDownload: user.canDownload || false,
+        };
+      });
+      setPermissions(perms);
+
     } catch (err) {
       console.error(err);
       setError("Échec du chargement des utilisateurs");
@@ -42,6 +61,31 @@ export default function Dashboard() {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || "Échec de la création de l’administrateur");
+    }
+  };
+
+  // Handle permission changes
+  const handlePermissionChange = (userId, field, value) => {
+    setPermissions((prev) => ({
+      ...prev,
+      [userId]: { ...prev[userId], [field]: value },
+    }));
+  };
+
+  // Save permissions for a user
+  const savePermissions = async (userId) => {
+    try {
+      await api.put(`/users/${userId}/permissions`, permissions[userId], {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+       
+      
+      // Emit socket event (optional, since backend already emits)
+      socket.emit("permission-updated", { userId });
+      alert("✅ Permissions mises à jour !");
+    } catch (err) {
+      console.error(err);
+      alert("❌ Échec de la mise à jour des permissions");
     }
   };
 
@@ -100,6 +144,7 @@ export default function Dashboard() {
                 <th className="py-2">Nom</th>
                 <th>Adresse e-mail</th>
                 <th>Rôle</th>
+                <th>Permissions</th> {/* New column */}
               </tr>
             </thead>
             <tbody>
@@ -108,6 +153,48 @@ export default function Dashboard() {
                   <td className="py-2">{user.name}</td>
                   <td>{user.email}</td>
                   <td className="capitalize">{user.role}</td>
+                  <td>
+                    {user.role !== "root" && (
+                      <div className="space-x-2 text-xs">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={permissions[user._id]?.canEdit || false}
+                            onChange={(e) =>
+                              handlePermissionChange(user._id, "canEdit", e.target.checked)
+                            }
+                          />{" "}
+                          Edit
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={permissions[user._id]?.canUpload || false}
+                            onChange={(e) =>
+                              handlePermissionChange(user._id, "canUpload", e.target.checked)
+                            }
+                          />{" "}
+                          Upload
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={permissions[user._id]?.canDownload || false}
+                            onChange={(e) =>
+                              handlePermissionChange(user._id, "canDownload", e.target.checked)
+                            }
+                          />{" "}
+                          Download
+                        </label>
+                        <button
+                          onClick={() => savePermissions(user._id)}
+                          className="ml-2 px-2 py-1 bg-blue-600 rounded hover:bg-blue-500 text-xs"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
