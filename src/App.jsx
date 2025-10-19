@@ -9,6 +9,7 @@ import Laboratoires from "./pages/Laboratoire.jsx";
 import Fournisseurs from "./pages/Fournisseurs.jsx";
 import Remises from "./pages/BestOffers.jsx";
 import Profile from "./pages/Profile.jsx"
+import Settings from "./pages/Settings.jsx";
 
 function App() {
   return (
@@ -33,6 +34,8 @@ function App() {
           <Route path="/fournisseur" element={<Fournisseurs />} />
           <Route path="/remises" element={<Remises />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
+
 
 
 

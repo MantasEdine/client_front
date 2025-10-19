@@ -11,8 +11,8 @@ export default function ProtectedRoutes() {
 
   // Define which routes each role can access
   const access = {
-    root: ["/dashboard", "/admin-panel", "/produits", "/laboratoire", "/fournisseur", "/remises", "/profile"],
-    admin: ["/admin-panel", "/produits", "/laboratoire", "/fournisseur", "/profile"], // Admin cannot see dashboard or remises
+    root: ["/dashboard", "/admin-panel", "/produits", "/laboratoire", "/fournisseur", "/remises", "/profile","/settings"],
+    admin: ["/admin-panel", "/produits", "/laboratoire", "/fournisseur", "/profile","/settings"], // Admin cannot see dashboard or remises
   };
 
   const allowedRoutes = access[user?.role] || [];

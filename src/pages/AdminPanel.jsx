@@ -27,6 +27,7 @@ export default function AdminPanel() {
     canUpload: false,
     canDownload: false,
   });
+  const [uploading, setUploading] = useState(false);
 
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user"));
@@ -97,7 +98,7 @@ export default function AdminPanel() {
 
   const addRow = () => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      alert("Vous n'avez pas la permission de modifier les données.");
       return;
     }
     setRows([...rows, createEmptyRow()]);
@@ -105,7 +106,7 @@ export default function AdminPanel() {
 
   const deleteRow = (id) => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de supprimer les données.");
+      alert("Vous n'avez pas la permission de supprimer les données.");
       return;
     }
     if (rows.length <= 1) return;
@@ -115,7 +116,7 @@ export default function AdminPanel() {
 
   const duplicateRow = (index) => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de dupliquer les données.");
+      alert("Vous n'avez pas la permission de dupliquer les données.");
       return;
     }
     const copy = { ...rows[index], id: Date.now() + Math.random() };
@@ -126,7 +127,7 @@ export default function AdminPanel() {
 
   const updateCell = (rowId, field, value) => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      alert("Vous n'avez pas la permission de modifier les données.");
       return;
     }
     setRows(
@@ -138,7 +139,7 @@ export default function AdminPanel() {
 
   const updateRemise = (rowId, fournisseurId, value) => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      alert("Vous n'avez pas la permission de modifier les données.");
       return;
     }
     setRows(
@@ -152,7 +153,7 @@ export default function AdminPanel() {
 
   const startEditingHeader = (f) => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de modifier les données.");
+      alert("Vous n'avez pas la permission de modifier les données.");
       return;
     }
     setEditingHeader(f.id);
@@ -175,104 +176,205 @@ export default function AdminPanel() {
 
   const saveToDatabase = async () => {
     if (!permissions.canEdit) {
-      alert("❌ Vous n'avez pas la permission de sauvegarder les données.");
+      alert("Vous n'avez pas la permission de sauvegarder les données.");
       return;
     }
 
-    try {
-      const validRows = rows.filter((r) => r.produit && r.laboratoire);
+    const validRows = rows.filter((r) => r.produit && r.laboratoire);
 
-      if (validRows.length === 0) {
-        alert("⚠️ Aucune donnée à sauvegarder.");
-        return;
-      }
+    if (validRows.length === 0) {
+      alert("Aucune donnée à sauvegarder.");
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    try {
+      const [labos, produits, fourns] = await Promise.all([
+        api.get("/laboratoire", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get("/produit", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get("/fournisseur", { headers: { Authorization: `Bearer ${token}` } })
+      ]);
 
       for (const row of validRows) {
-        let laboId = null;
         try {
-          const { data: laboData } = await api.post(
-            "/laboratoire",
-            { name: row.laboratoire },
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          laboId = laboData.laboratoire._id;
-        } catch (err) {
-          if (err.response?.status === 400) {
-            const { data: labos } = await api.get("/laboratoire", {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const existingLabo = labos.find((l) => l.name === row.laboratoire);
-            laboId = existingLabo?._id;
+          let labo = labos.data.find((l) => l.name === row.laboratoire);
+          if (!labo) {
+            const { data: laboData } = await api.post(
+              "/laboratoire",
+              { name: row.laboratoire },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            labo = laboData.laboratoire;
+            labos.data.push(labo);
           }
-        }
 
-        let produitId = null;
-        try {
-          const { data: produitData } = await api.post(
-            "/produit",
-            { name: row.produit, laboratoireId: laboId },
-            { headers: { Authorization: `Bearer ${token}` } }
+          let produit = produits.data.find(
+            (p) => p.name === row.produit && p.laboratoire?._id === labo._id
           );
-          produitId = produitData.produit._id;
-        } catch (err) {
-          if (err.response?.status === 400) {
-            const { data: produits } = await api.get("/produit", {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const existingProduit = produits.find((p) => p.name === row.produit);
-            produitId = existingProduit?._id;
+          if (!produit) {
+            const { data: produitData } = await api.post(
+              "/produit",
+              { name: row.produit, laboratoireId: labo._id },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            produit = produitData.produit;
+            produits.data.push(produit);
           }
-        }
 
-        for (const fournisseur of fournisseurs) {
-          const remiseValue = row.remises[fournisseur.id];
-          if (remiseValue && parseFloat(remiseValue) > 0) {
-            let fournisseurId = null;
-            try {
+          for (const fournisseur of fournisseurs) {
+            const remiseValue = row.remises[fournisseur.id];
+            if (!remiseValue || parseFloat(remiseValue) <= 0) continue;
+
+            let fourn = fourns.data.find((f) => f.name === fournisseur.name);
+            if (!fourn) {
               const { data: fournData } = await api.post(
                 "/fournisseur",
                 { name: fournisseur.name },
                 { headers: { Authorization: `Bearer ${token}` } }
               );
-              fournisseurId = fournData.fournisseur._id;
-            } catch (err) {
-              if (err.response?.status === 400) {
-                const { data: fourns } = await api.get("/fournisseur", {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                const existingFourn = fourns.find((f) => f.name === fournisseur.name);
-                fournisseurId = existingFourn?._id;
-              }
+              fourn = fournData.fournisseur;
+              fourns.data.push(fourn);
             }
 
             try {
               await api.post(
                 "/remise",
                 {
-                  produitId: produitId,
-                  fournisseurId: fournisseurId,
+                  produitId: produit._id,
+                  fournisseurId: fourn._id,
                   remise: parseFloat(remiseValue),
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
               );
-            } catch (err) {
-              console.log("Remise existe déjà ou erreur:", err.response?.data);
+            } catch (remiseErr) {
+              if (remiseErr.response?.status !== 400) {
+                throw remiseErr;
+              }
             }
           }
+
+          successCount++;
+        } catch (rowErr) {
+          console.error("Erreur ligne:", row, rowErr);
+          errors.push(`${row.produit}: ${rowErr.response?.data?.message || rowErr.message}`);
+          errorCount++;
         }
       }
 
-      alert("✅ Données sauvegardées avec succès !");
+      if (errorCount > 0) {
+        alert(
+          `Sauvegarde terminée avec erreurs:\n` +
+          `${successCount} lignes réussies\n` +
+          `${errorCount} erreurs\n\n` +
+          `Erreurs:\n${errors.slice(0, 5).join("\n")}`
+        );
+      } else {
+        alert(`Données sauvegardées avec succès!\n${successCount} lignes traitées`);
+      }
+
       socket.emit("remise-update");
     } catch (err) {
       console.error("Erreur lors de la sauvegarde:", err);
-      alert("❌ Erreur lors de la sauvegarde des données.");
+      alert(`Erreur lors de la sauvegarde:\n${err.response?.data?.message || err.message}`);
+    }
+  };
+
+  const exportAndUploadToBackend = async () => {
+    if (!permissions.canDownload) {
+      alert("Vous n'avez pas la permission de télécharger les données.");
+      return;
+    }
+
+    const validRows = rows.filter((r) => r.produit && r.laboratoire);
+
+    if (validRows.length === 0) {
+      alert("Aucune donnée à télécharger.");
+      return;
+    }
+
+    const fileName = prompt(
+      "Nom du fichier Excel (sans extension) :",
+      `remises_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}`
+    );
+    if (!fileName || !fileName.trim()) return;
+
+    const cleanFileName = fileName.trim().replace(/[^a-z0-9_-]/gi, '_');
+
+    try {
+      setUploading(true);
+
+      const data = validRows.map((row) => {
+        const obj = {
+          Produit: row.produit,
+          Laboratoire: row.laboratoire,
+        };
+
+        fournisseurs.forEach((f) => {
+          obj[f.name] = row.remises[f.id] || "";
+        });
+
+        const best = calculateBestOffers(row.remises);
+        obj["MEILLEURE OFFRE"] = best[0].value > 0 ? `${best[0].name} (${best[0].value}%)` : "—";
+        obj["2ÈME OFFRE"] = best[1].value > 0 ? `${best[1].name} (${best[1].value}%)` : "—";
+        obj["3ÈME OFFRE"] = best[2].value > 0 ? `${best[2].name} (${best[2].value}%)` : "—";
+
+        return obj;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Remises");
+
+      const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const finalFileName = `${cleanFileName}.xlsx`;
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = finalFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      console.log("Fichier téléchargé localement");
+
+      if (permissions.canUpload) {
+        const formData = new FormData();
+        formData.append("file", blob, finalFileName);
+
+        const response = await api.post("/excel/upload", formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        console.log("Fichier uploadé au serveur:", response.data);
+        alert(`Fichier téléchargé et sauvegardé!\n\nRésumé:\n- ${response.data.stats?.processed || 0} lignes traitées\n- Fichier: ${response.data.filename}`);
+      } else {
+        alert(`Fichier téléchargé localement!\n\nVous n'avez pas la permission d'uploader sur le serveur.`);
+      }
+
+      socket.emit("remise-update");
+    } catch (err) {
+      console.error("Erreur lors de l'export/upload:", err);
+      alert(`Erreur: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setUploading(false);
     }
   };
 
   const handleImport = async (file) => {
     if (!permissions.canUpload) {
-      alert("❌ Vous n'avez pas la permission d'importer des données.");
+      alert("Vous n'avez pas la permission d'importer des données.");
       return;
     }
 
@@ -317,10 +419,10 @@ export default function AdminPanel() {
       });
 
       setRows(newRows);
-      alert(`✅ ${newRows.length} lignes importées !`);
+      alert(`${newRows.length} lignes importées !`);
     } catch (err) {
       console.error(err);
-      alert("❌ Erreur lors de l'import du fichier.");
+      alert("Erreur lors de l'import du fichier.");
     }
   };
 
@@ -335,17 +437,16 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4">
-      {/* Permission Banner */}
       <div className={`mb-4 p-3 rounded ${permissions.canEdit ? "bg-green-900/30 border border-green-700" : "bg-red-900/30 border border-red-700"}`}>
         <div className="text-sm">
           <p className={permissions.canEdit ? "text-green-300" : "text-red-300"}>
-            {permissions.canEdit ? "✅ Modification: Activée" : "🔒 Modification: Désactivée"}
+            {permissions.canEdit ? "✓ Modification: Activée" : "✗ Modification: Désactivée"}
           </p>
           <p className={permissions.canUpload ? "text-green-300" : "text-red-300"}>
-            {permissions.canUpload ? "✅ Import: Activé" : "🔒 Import: Désactivé"}
+            {permissions.canUpload ? "✓ Import: Activé" : "✗ Import: Désactivé"}
           </p>
           <p className={permissions.canDownload ? "text-green-300" : "text-red-300"}>
-            {permissions.canDownload ? "✅ Export: Activé" : "🔒 Export: Désactivé"}
+            {permissions.canDownload ? "✓ Export: Activé" : "✗ Export: Désactivé"}
           </p>
         </div>
       </div>
@@ -362,7 +463,7 @@ export default function AdminPanel() {
           />
 
           <label className={`px-2 py-1 rounded cursor-pointer ${permissions.canUpload ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-700 opacity-50 cursor-not-allowed"}`}>
-            📂 Importer Excel
+            Importer Excel
             <input
               type="file"
               accept=".xlsx,.xls"
@@ -385,7 +486,15 @@ export default function AdminPanel() {
             disabled={!permissions.canEdit}
             className={`px-2 py-1 rounded ${permissions.canEdit ? "bg-blue-600 hover:bg-blue-500" : "bg-gray-600 opacity-50 cursor-not-allowed"}`}
           >
-            💾 Sauvegarder
+            Sauvegarder DB
+          </button>
+
+          <button
+            onClick={exportAndUploadToBackend}
+            disabled={!permissions.canDownload || uploading}
+            className={`px-2 py-1 rounded ${permissions.canDownload ? "bg-purple-600 hover:bg-purple-500" : "bg-gray-600 opacity-50 cursor-not-allowed"} ${uploading ? "opacity-50" : ""}`}
+          >
+            {uploading ? "Envoi..." : "Telecharger & Uploader"}
           </button>
         </div>
       </div>
@@ -401,7 +510,7 @@ export default function AdminPanel() {
             <div className="flex gap-2">
               {permissions.canUpload && (
                 <label className="bg-indigo-600 px-4 py-2 rounded cursor-pointer hover:bg-indigo-500">
-                  📂 Importer Excel
+                  Importer Excel
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -547,7 +656,7 @@ export default function AdminPanel() {
       )}
 
       <div className="mt-3 text-xs text-gray-400">
-        💡 Les permissions de modification sont contrôlées par le Root. Contactez l'administrateur pour obtenir les permissions d'édition.
+        Les permissions de modification sont contrôlées par le Root. Contactez l'administrateur pour obtenir les permissions d'édition.
       </div>
     </div>
   );

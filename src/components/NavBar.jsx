@@ -125,7 +125,7 @@ export default function BarreNavigation() {
                 </MenuItem>
                 <MenuItem>
                   <NavLink
-                    to="/parametres"
+                    to="/settings"
                     className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/5"
                   >
                     Paramètres

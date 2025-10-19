@@ -85,9 +85,9 @@ export default function ProfilePage() {
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.role === 'root' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/50'}`}>
                     {user.role === 'root' ? '👑 Super Administrateur' : '🔧 Administrateur'}
                   </span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${user.isActive ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-500/20 text-gray-400 border border-gray-500/50'}`}>
-                    {user.isActive ? '● Actif' : '● Inactif'}
-                  </span>
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500/50">
+  ● Actif
+</span>
                 </div>
               </div>
             </div>
