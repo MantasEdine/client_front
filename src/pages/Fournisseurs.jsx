@@ -9,7 +9,7 @@ export default function Fournisseurs() {
     const fetchFournisseurs = async () => {
       try {
         const token = localStorage.getItem("token");
-        const { data } = await api.get("/fournisseur", {
+        const { data } = await api.get("/api/fournisseur", {
           headers: { Authorization: `Bearer ${token}` },
         });
 

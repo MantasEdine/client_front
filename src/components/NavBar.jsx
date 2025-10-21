@@ -28,7 +28,7 @@ export default function BarreNavigation() {
     try {
       if (token) {
         await api.post(
-          "/auth/logout",
+          "/api/auth/logout",
           {},
           {
             headers: { Authorization: `Bearer ${token}` },

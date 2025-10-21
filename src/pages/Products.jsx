@@ -10,7 +10,7 @@ export default function Produits() {
     const fetchProduits = async () => {
       try {
         const token = localStorage.getItem("token");
-const { data } = await api.get("/produit", {
+const { data } = await api.get("/api/produit", {
   headers: { Authorization: `Bearer ${token}` },
 });
         console.log("📦 Produits chargés :", data);

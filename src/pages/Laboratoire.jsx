@@ -11,7 +11,7 @@ export default function Laboratoires() {
     const fetchLaboratoires = async () => {
       try {
         const token = localStorage.getItem("token");
-        const { data } = await api.get("/laboratoire", {
+        const { data } = await api.get("/api/laboratoire", {
           headers: { Authorization: `Bearer ${token}` },
         });
 

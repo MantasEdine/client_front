@@ -6,7 +6,7 @@ export default function Dashboard() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
- const socket = useMemo(() => io("http://localhost:5000"), []);
+ const socket = useMemo(() => io("http://localhost:5173/"), []);
   const [permissions, setPermissions] = useState({}); // New: store permissions per user
   const token = localStorage.getItem("token");
  
@@ -18,7 +18,7 @@ export default function Dashboard() {
   // Récupérer tous les administrateurs
   const fetchAdmins = async () => {
     try {
-      const { data } = await api.get("/auth/users", {
+      const { data } = await api.get("/api/auth/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -52,7 +52,7 @@ export default function Dashboard() {
     setSuccess("");
 
     try {
-      await api.post("/auth/register", form, {
+      await api.post("/api/auth/register", form, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setSuccess("Administrateur créé avec succès !");
@@ -75,7 +75,7 @@ export default function Dashboard() {
   // Save permissions for a user
   const savePermissions = async (userId) => {
     try {
-      await api.put(`/users/${userId}/permissions`, permissions[userId], {
+      await api.put(`/api/users/${userId}/permissions`, permissions[userId], {
         headers: { Authorization: `Bearer ${token}` },
       });
        
